@@ -3,6 +3,7 @@ import shutil
 import mimetypes
 import sys
 from datetime import datetime
+from collections import defaultdict
 
 try:
     import exifread
@@ -33,10 +34,26 @@ def get_new_filename(file_path):
     # Fallback: Use file creation date
     return datetime.fromtimestamp(timestamp)
 
+def get_unique_filename(directory, filename):
+    """ Ensures a unique filename by appending a counter if needed. """
+    base, ext = os.path.splitext(filename)
+    counter = 1
+    new_filename = filename
+    
+    while os.path.exists(os.path.join(directory, new_filename)):
+        new_filename = f"{base}_{counter}{ext}"
+        counter += 1
+    
+    return new_filename
+
 def sort_and_rename_photorec_output(input_dir, output_dir):
     """ Sorts and renames files recovered by Photorec into the desired structure. """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    
+    total_files = sum(len(files) for _, _, files in os.walk(input_dir))
+    processed_files = 0
+    file_type_count = defaultdict(int)
     
     for root, _, files in os.walk(input_dir):
         for file in files:
@@ -45,6 +62,7 @@ def sort_and_rename_photorec_output(input_dir, output_dir):
             
             file_path = os.path.join(root, file)
             file_type = get_file_type(file_path)
+            file_type_count[file_type] += 1
             date = get_new_filename(file_path)
             
             year = date.strftime("%Y")
@@ -55,9 +73,16 @@ def sort_and_rename_photorec_output(input_dir, output_dir):
             if not os.path.exists(type_dir):
                 os.makedirs(type_dir)
             
-            new_path = os.path.join(type_dir, new_name)
+            unique_name = get_unique_filename(type_dir, new_name)
+            new_path = os.path.join(type_dir, unique_name)
+            
             shutil.copy2(file_path, new_path)
-            print(f"Copied: {file_path} -> {new_path}")
+            processed_files += 1
+            print(f"[{processed_files}/{total_files}] Copied: {file_path} -> {new_path}")
+    
+    print("\nProcessing complete. File type statistics:")
+    for file_type, count in file_type_count.items():
+        print(f"{file_type}: {count} files")
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
